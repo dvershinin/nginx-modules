@@ -2,10 +2,12 @@ defaults: &defaults
     steps: # a set of executable commands
       - add_ssh_keys:
           fingerprints:
-            - "8c:a4:dd:2c:47:4c:63:aa:90:0b:e0:d6:15:be:87:82"
+            - "${SOURCE_KEY}"
       - run:
           name: "Fetch sources"
-          command: git clone ${SOURCE_GIT} .
+          command: |
+            git clone ${SOURCE_GIT} .
+            ls -al
       - checkout # special step to check out source code to working directory
       - run:
           name: "Run the build itself: this will do rpmlint and check RPMs existence among other things."
