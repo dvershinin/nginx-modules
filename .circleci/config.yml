@@ -6,6 +6,7 @@ defaults: &defaults
       - run:
           name: "Fetch sources"
           command: |
+            ssh-keyscan bitbucket.org >> ~/.ssh/known_hosts 
             git clone ${SOURCE_GIT} .
             ls -al
       - checkout # special step to check out source code to working directory
