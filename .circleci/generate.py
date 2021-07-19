@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import dnf
 import lastversion
+import yaml
 # Generate workflows for nginx/module/branch/release that are missing from the repo
 # 1. read each.yml for info on release (default 1 if not specified), excluded/included branches for it
 # 2. for each "build" of the module, check against corresponding repo whether we already have this version/release built
@@ -42,6 +43,57 @@ modules = {
         'repo': 'GetPageSpeed/ngx_brotli'
     }
 }
+
+# build up final yml based on header.yml and set up jobs: and workflows:
+config = {
+    'version': '2.1',
+    'jobs': {},
+    'workflows': {
+        'version': 2
+    }
+}
+
+with open('header.yml') as f:
+    header_config = yaml.safe_load(f)
+
+def create_distro_workflow(v, distro_name, distro_config):
+    print(f"Generating {v} for {distro_name}")
+    dist = distro_name
+    if 'dist' in distro_config:
+        dist = distro_config['dist']
+    distro_build_job_name = f"{dist}{v}"
+    # distro_build_job = header_config['defaults']
+    docker_tag_base = distro_name
+    if 'docker-tag-base' in distro_config:
+        docker_tag_base = distro_config['docker-tag-base']
+    docker_image = f'getpagespeed/rpmbuilder:{docker_tag_base}-{v}'
+    distro_build_job = header_config['defaults'].copy()
+    distro_build_job.update({
+        'docker': [{
+            'image': docker_image
+        }]
+    })
+    config['jobs'][distro_build_job_name] = distro_build_job
+
+    distro_deploy_job_name = f"deploy-{distro_build_job_name}"
+    distro_deploy_job = header_config['deploy'].copy()
+    distro_deploy_job['environment'] = {
+        'DISTRO': distro_build_job_name
+    }
+    config['jobs'][distro_deploy_job_name] = distro_deploy_job
+
+    distro_workflow_name = f"build-deploy-{distro_build_job_name}"
+    distro_workflow = {'jobs': []}
+    distro_workflow['jobs'].append(distro_build_job_name)
+    distro_workflow['jobs'].append({
+        distro_deploy_job_name: {
+            'context': 'org-global',
+            'requires': [
+                distro_build_job_name
+            ]
+        }
+    })
+
 for branch in nginx_branches:
     nginx_version = lastversion.latest("nginx", major=branch)
     sub = '' if branch == 'stable' else f'/{branch}'
