@@ -1,0 +1,72 @@
+defaults: &defaults
+    steps: # a set of executable commands
+      - add_ssh_keys:
+          fingerprints:
+            - "8c:a4:dd:2c:47:4c:63:aa:90:0b:e0:d6:15:be:87:82"
+      - run:
+          name: "Fetch sources"
+          command: git clone ${SOURCE_GIT} .
+      - checkout # special step to check out source code to working directory
+      - run:
+          name: "Run the build itself: this will do rpmlint and check RPMs existence among other things."
+          command: build
+      - persist_to_workspace:
+          root: /output
+          paths:
+            - "*.rpm"
+
+version: 2 
+jobs: # a collection of steps
+  el6:
+    docker: # run the steps with Docker
+      - image: getpagespeed/rpmbuilder:centos-6
+    working_directory: /sources # directory where steps will run
+    <<: *defaults
+  el7:
+    docker:
+      - image: getpagespeed/rpmbuilder:centos-7
+    working_directory: /sources # directory where steps will run
+    <<: *defaults
+  el8:
+    docker:
+      - image: getpagespeed/rpmbuilder:centos-8
+    working_directory: /sources # directory where steps will run
+    <<: *defaults    
+  deploy:
+    docker:
+      - image: centos:7
+    environment:
+      RPMLINT: 1
+    working_directory: /output
+    steps:
+      - attach_workspace:
+          at: /output
+      - add_ssh_keys:
+          fingerprints:
+            - "8c:a4:dd:2c:47:4c:63:aa:90:0b:e0:d6:15:be:87:82"
+      - run:
+          name: "Install stuff to deploy"
+          command: yum -y install openssh-clients
+      - run:
+          name: "Deploy all RPMs to GetPageSpeed repo."
+          command: scp -o StrictHostKeyChecking=no -q -r *.rpm $GPS_BUILD_USER@$GPS_BUILD_SERVER:~/incoming/
+      - run:
+          name: "Trigger Deploy Hook."
+          command: ssh -o StrictHostKeyChecking=no -q $GPS_BUILD_USER@$GPS_BUILD_SERVER "launch2log.sh ~/scripts/incoming.sh ~/incoming/process.log"
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+      - el6
+      - el7
+      - el8
+      - deploy:
+          context: org-global
+          requires:
+            - el6
+            - el7
+            - el8
+          filters:
+            branches:
+              only: master
+
