@@ -9,7 +9,6 @@ defaults: &defaults
             mkdir -p ~/.ssh && ssh-keyscan bitbucket.org >> ~/.ssh/known_hosts 
             git clone ${SOURCE_GIT} .
             ls -al
-      - checkout # special step to check out source code to working directory
       - run:
           name: "Run the build itself: this will do rpmlint and check RPMs existence among other things."
           command: build
